@@ -291,15 +291,16 @@ export const getprofile = async (req, res) => {
 // =======================================
 export const updateProfile = async (req, res) => {
   try {
+    // Validate request body
     const { error } = updateProfileValidation.validate(req.body);
     if (error) {
       return errorResponse(res, `Validation error: ${error.details[0].message}`, STATUS.BAD_REQUEST);
     }
 
-    const { name, email,mobileNumber } = req.body;
+    const { name, email, mobileNumber } = req.body;
     const admin = await Admin.findById(req.admin._id);
     if (!admin) {
-      return errorResponse(res, 'Admin not found', STATUS.NOT_FOUND);
+      throw errorResponse(res, 'Admin not found', STATUS.NOT_FOUND);
     }
 
     // Check if new email is already in use
@@ -323,10 +324,36 @@ export const updateProfile = async (req, res) => {
     if (email) admin.email = email;
     if (mobileNumber !== undefined) admin.mobileNumber = mobileNumber;
 
-    if (req.file) {
-      admin.image = `/Uploads/${req.file.filename}`;
+    // Handle Cloudinary image upload
+    if (req.files?.image?.[0]?.path) {
+      // Delete old image from Cloudinary if it exists
+      if (admin.imagePublicId) {
+        try {
+          await cloudinary.uploader.destroy(admin.imagePublicId);
+        } catch (error) {
+          console.error('Error deleting old profile image from Cloudinary:', error);
+          // Continue with update even if deletion fails
+        }
+      }
+
+      // Upload new image to Cloudinary
+      try {
+        const imageResult = await cloudinary.uploader.upload(req.files.image[0].path, {
+          folder: 'misha_brand/profiles', // Align with createCategory's folder structure
+        });
+        admin.image = imageResult.secure_url;
+        admin.imagePublicId = imageResult.public_id;
+      } catch (error) {
+        console.error('Cloudinary upload error (profile image):', error);
+        return errorResponse(res, 'Failed to upload profile image', STATUS.SERVER_ERROR);
+      }
     } else if (req.body.image) {
-      admin.image = req.body.image; // If it's a direct URL
+      // Optional: Keep direct URL but validate or remove for consistency with createCategory
+      if (!isValidUrl(req.body.image)) {
+        return errorResponse(res, 'Invalid image URL', STATUS.BAD_REQUEST);
+      }
+      admin.image = req.body.image;
+      admin.imagePublicId = null;
     }
 
     await admin.save();
@@ -346,5 +373,15 @@ export const updateProfile = async (req, res) => {
   } catch (error) {
     console.error('Update profile error:', error);
     return errorResponse(res, 'Server error', STATUS.SERVER_ERROR);
+  }
+};
+
+// Optional: URL validation helper
+const isValidUrl = (url) => {
+  try {
+    new URL(url);
+    return true;
+  } catch {
+    return false;
   }
 };
