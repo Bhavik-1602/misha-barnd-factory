@@ -300,7 +300,7 @@ export const updateProfile = async (req, res) => {
     const { name, email, mobileNumber } = req.body;
     const admin = await Admin.findById(req.admin._id);
     if (!admin) {
-      throw errorResponse(res, 'Admin not found', STATUS.NOT_FOUND);
+      return errorResponse(res, 'Admin not found', STATUS.NOT_FOUND);
     }
 
     // Check if new email is already in use
@@ -325,7 +325,7 @@ export const updateProfile = async (req, res) => {
     if (mobileNumber !== undefined) admin.mobileNumber = mobileNumber;
 
     // Handle Cloudinary image upload
-    if (req.files?.image?.[0]?.path) {
+    if (req.file?.path) {
       // Delete old image from Cloudinary if it exists
       if (admin.imagePublicId) {
         try {
@@ -338,8 +338,15 @@ export const updateProfile = async (req, res) => {
 
       // Upload new image to Cloudinary
       try {
-        const imageResult = await cloudinary.uploader.upload(req.files.image[0].path, {
-          folder: 'misha_brand/profiles', // Align with createCategory's folder structure
+        const sanitizedName = name
+          ? name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 50)
+          : `admin_${admin._id}`;
+        const publicId = `profile_${sanitizedName}_${Date.now()}`;
+        const imageResult = await cloudinary.uploader.upload(req.file.path, {
+          folder: 'misha_brand/profiles', // Use a separate folder for profiles
+          format: 'jpg', // Enforce jpg format
+          public_id: publicId,
+          transformation: [{ width: 960, height: 960, crop: 'limit', quality: 'auto' }],
         });
         admin.image = imageResult.secure_url;
         admin.imagePublicId = imageResult.public_id;
@@ -347,13 +354,6 @@ export const updateProfile = async (req, res) => {
         console.error('Cloudinary upload error (profile image):', error);
         return errorResponse(res, 'Failed to upload profile image', STATUS.SERVER_ERROR);
       }
-    } else if (req.body.image) {
-      // Optional: Keep direct URL but validate or remove for consistency with createCategory
-      if (!isValidUrl(req.body.image)) {
-        return errorResponse(res, 'Invalid image URL', STATUS.BAD_REQUEST);
-      }
-      admin.image = req.body.image;
-      admin.imagePublicId = null;
     }
 
     await admin.save();
@@ -373,15 +373,5 @@ export const updateProfile = async (req, res) => {
   } catch (error) {
     console.error('Update profile error:', error);
     return errorResponse(res, 'Server error', STATUS.SERVER_ERROR);
-  }
-};
-
-// Optional: URL validation helper
-const isValidUrl = (url) => {
-  try {
-    new URL(url);
-    return true;
-  } catch {
-    return false;
   }
 };
