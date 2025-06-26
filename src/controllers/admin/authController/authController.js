@@ -19,6 +19,8 @@ import EmailTemplates, {
   getPasswordChangeTemplate,
 } from '../../../utils/emailTemplates/emailTemplate.js';
 
+import cloudinary from '../../../config/cloudinary.js'; // Adjust path as needed
+
 // ============================
 // Helper: Generate JWT Token
 // ============================
