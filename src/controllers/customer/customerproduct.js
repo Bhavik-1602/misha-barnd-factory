@@ -690,3 +690,143 @@ export const getDealsOfTheMonth = asyncHandler(async (req, res) => {
     });
   }
 });
+
+
+
+
+export const getFilterOptions = asyncHandler(async (req, res) => {
+  try {
+    const { tags } = req.query;
+
+    // Initialize query for visible and non-sold-out products
+    const productQuery = { isVisible: true, isSoldOut: false };
+
+    // Handle tags filter if provided
+    let tagsArray = [];
+    if (tags?.trim()) {
+      tagsArray = Array.isArray(tags)
+        ? tags.map(tag => tag.trim().toLowerCase())
+        : tags.split(',').map(tag => tag.trim().toLowerCase()).filter(tag => tag.length > 0);
+      if (tagsArray.length > 0) {
+        productQuery.tags = { $in: tagsArray };
+      }
+    }
+
+    // Fetch products matching the query to get related colors, brands, and sizes
+    const products = await Product.find(productQuery)
+      .select('category variants.color brand variants.sizes')
+      .lean();
+
+    // Extract unique category IDs, color IDs, brand IDs, and sizes
+    const categoryIds = new Set();
+    const colorIds = new Set();
+    const brandIds = new Set();
+    const sizesSet = new Set(); // Use Set to ensure unique sizes
+
+    products.forEach(product => {
+      if (product.category) {
+        categoryIds.add(product.category.toString());
+      }
+      if (product.brand) {
+        brandIds.add(product.brand.toString());
+      }
+      if (product.variants && Array.isArray(product.variants)) {
+        product.variants.forEach(variant => {
+          if (variant.color) {
+            colorIds.add(variant.color.toString());
+          }
+          if (variant.sizes && Array.isArray(variant.sizes)) {
+            variant.sizes.forEach(size => {
+              // Only collect symbol field if it exists, otherwise handle string sizes
+              if (typeof size === 'object' && size !== null && size.symbol?.trim()) {
+                sizesSet.add(size.symbol.trim());
+              } else if (typeof size === 'string' && size.trim()) {
+                sizesSet.add(size.trim());
+              }
+            });
+          }
+        });
+      }
+    });
+
+    // Fetch colors
+    const colors = await Color.find({ _id: { $in: Array.from(colorIds) } })
+      .select('name hex _id')
+      .sort({ createdAt: -1 })
+      .limit(12)
+      .lean();
+
+    // Fetch brands
+    const brands = await Brand.find({ _id: { $in: Array.from(brandIds) } })
+      .select('name _id')
+      .sort({ createdAt: -1 })
+      .limit(6)
+      .lean();
+
+    // Fetch sizes from categories as a fallback if no sizes found in products
+    let sizes = Array.from(sizesSet).map(size => ({ symbol: size }));
+    if (sizes.length === 0 && categoryIds.size > 0) {
+      const categories = await Category.find({ _id: { $in: Array.from(categoryIds) } })
+        .select('sizes')
+        .lean();
+      categories.forEach(category => {
+        if (category.sizes && Array.isArray(category.sizes)) {
+          category.sizes.forEach(size => {
+            // Only collect symbol field if it exists, otherwise handle string sizes
+            if (typeof size === 'object' && size !== null && size.symbol?.trim()) {
+              sizesSet.add(size.symbol.trim());
+            } else if (typeof size === 'string' && size.trim()) {
+              sizesSet.add(size.trim());
+            }
+          });
+        }
+      });
+      sizes = Array.from(sizesSet).map(size => ({ symbol: size }));
+    }
+
+    // Fetch unique tags from products (if no tags provided, return top tags)
+    let tagsData = [];
+    if (tagsArray.length > 0) {
+      tagsData = tagsArray.map(tag => ({ name: tag }));
+    } else {
+      const tagsAggregation = await Product.aggregate([
+        { $match: { isVisible: true, isSoldOut: false } },
+        { $unwind: '$tags' },
+        { $group: { _id: '$tags' } },
+        { $sort: { _id: 1 } },
+        { $limit: 10 },
+        { $project: { name: '$_id', _id: 0 } },
+      ]);
+      tagsData = tagsAggregation;
+    }
+
+    // Handle case where no products match
+    if (products.length === 0) {
+      return res.status(STATUS.OK).json({
+        statusCode: STATUS.OK,
+        message: `No products found${tagsArray.length > 0 ? ` for tags "${tags}"` : ''}`,
+        data: { colors: [], brands: [], sizes: [], tags: tagsData },
+      });
+    }
+
+    // Prepare response
+    const responseData = {
+      statusCode: STATUS.OK,
+      message: `Filter options fetched successfully${tagsArray.length > 0 ? ` for tags "${tags}"` : ''}`,
+      data: {
+        colors,
+        brands,
+        sizes,
+        tags: tagsData,
+      },
+    };
+
+    return res.status(STATUS.OK).json(responseData);
+  } catch (error) {
+    console.error('Filter options fetch error:', error);
+    return res.status(STATUS.SERVER_ERROR).json({
+      statusCode: STATUS.SERVER_ERROR,
+      message: `Failed to fetch filter options: ${error.message}`,
+    });
+  }
+});

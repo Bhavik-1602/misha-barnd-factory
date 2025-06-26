@@ -253,14 +253,32 @@ export const updateCategory = asyncHandler(async (req, res) => {
       }
     }
 
-    // Update with new images
+    // Upload new images to Cloudinary
     if (req.files.bannerImage) {
-      category.bannerImage = req.files.bannerImage[0].secure_url;
-      category.bannerImagePublicId = req.files.bannerImage[0].public_id;
+      try {
+        const bannerResult = await cloudinary.uploader.upload(req.files.bannerImage[0].path, {
+          folder: 'misha_brand/categories',
+        });
+        category.bannerImage = bannerResult.secure_url;
+        category.bannerImagePublicId = bannerResult.public_id;
+      } catch (error) {
+        console.error('Cloudinary upload error (bannerImage):', error);
+        res.status(STATUS.SERVER_ERROR);
+        throw new Error('Failed to upload banner image');
+      }
     }
     if (req.files.icon) {
-      category.icon = req.files.icon[0].secure_url;
-      category.iconPublicId = req.files.icon[0].public_id;
+      try {
+        const iconResult = await cloudinary.uploader.upload(req.files.icon[0].path, {
+          folder: 'misha_brand/categories',
+        });
+        category.icon = iconResult.secure_url;
+        category.iconPublicId = iconResult.public_id;
+      } catch (error) {
+        console.error('Cloudinary upload error (icon):', error);
+        res.status(STATUS.SERVER_ERROR);
+        throw new Error('Failed to upload icon');
+      }
     }
   }
 

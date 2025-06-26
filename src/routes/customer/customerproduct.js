@@ -4,7 +4,8 @@ import {
   getNewArrivals,
   getCustomerProductById,
   filterCustomerProducts,
-  getDealsOfTheMonth
+  getDealsOfTheMonth,
+  getFilterOptions
 } from '../../controllers/customer/customerproduct.js';
 
 // Initialize Express router
@@ -39,6 +40,9 @@ router.get('/new-arrivals', getNewArrivals);
  * @access  Public
  */
 router.get('/filter', filterCustomerProducts);
+
+
+router.get('/allfilters', getFilterOptions);
 
 /**
  * @route   GET /api/customer-products/:id
