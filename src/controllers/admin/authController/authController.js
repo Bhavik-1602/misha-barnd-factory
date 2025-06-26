@@ -289,6 +289,7 @@ export const getprofile = async (req, res) => {
 // @desc    Update admin profile
 // @route   PUT /api/admin/profile
 // =======================================
+
 export const updateProfile = async (req, res) => {
   try {
     // Validate request body
