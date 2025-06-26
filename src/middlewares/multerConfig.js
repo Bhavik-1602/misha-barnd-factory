@@ -2,8 +2,9 @@ import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { CloudinaryStorage } from 'multer-storage-cloudinary';
-import { v2 as cloudinary } from 'cloudinary';
+// import { v2 as cloudinary } from 'cloudinary';
 
+import cloudinary from '../config/cloudinary.js'; // Adjust path as needed
 // Get __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
