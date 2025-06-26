@@ -83,7 +83,7 @@ export const login = async (req, res) => {
     const { error } = loginValidation.validate(req.body);
     if (error) {
       return res.status(STATUS.BAD_REQUEST).json({
-        status: STATUS.BAD_REQUEST,
+        statusCode: STATUS.BAD_REQUEST,
         message: MESSAGES.VALIDATION_ERROR,
         admin: { error: error.details[0].message }
       });
@@ -94,7 +94,7 @@ export const login = async (req, res) => {
 
     if (!admin || !admin.isActive) {
       return res.status(STATUS.UNAUTHORIZED).json({
-        status: STATUS.UNAUTHORIZED,
+        statusCode: STATUS.UNAUTHORIZED,
         message: MESSAGES.INVALID_CREDENTIALS,
         admin: null
       });
@@ -103,7 +103,7 @@ export const login = async (req, res) => {
     const isPasswordMatch = await admin.comparePassword(password);
     if (!isPasswordMatch) {
       return res.status(STATUS.UNAUTHORIZED).json({
-        status: STATUS.UNAUTHORIZED,
+        statusCode: STATUS.UNAUTHORIZED,
         message: MESSAGES.INVALID_CREDENTIALS,
         admin: null
       });
@@ -129,13 +129,12 @@ export const login = async (req, res) => {
   } catch (error) {
     console.error('Login error:', error);
     return res.status(STATUS.SERVER_ERROR).json({
-      status: STATUS.SERVER_ERROR,
+      statusCode: STATUS.SERVER_ERROR,
       message: MESSAGES.SERVER_ERROR,
       admin: null
     });
   }
 };
-
 // ============================================
 // @desc    Forgot password (send reset link)
 // @route   POST /api/admin/forgot-password

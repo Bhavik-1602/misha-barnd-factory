@@ -392,11 +392,14 @@ export const updateProduct = asyncHandler(async (req, res) => {
     });
   }
 
-  // Find existing product with populated fields
+  // Log request body for debugging
+  // console.log('Request Body Variants:', JSON.stringify(req.body.variants));
+
+  // Find existing product
   const product = await Product.findById(req.params.id)
     .populate('category', 'name description')
     .populate('variants.color', 'name hex')
-    .populate('brand', 'name description');
+    .populate('brand', 'name description');  
 
   if (!product) {
     return res.status(STATUS.NOT_FOUND).json({
@@ -424,6 +427,30 @@ export const updateProduct = asyncHandler(async (req, res) => {
     discount,
   } = req.body;
 
+  // Validate variants
+  if (variants && Array.isArray(variants)) {
+    for (const variant of variants) {
+      if (variant.color && typeof variant.color === 'object') {
+        return res.status(STATUS.BAD_REQUEST).json({
+          statusCode: STATUS.BAD_REQUEST,
+          message: 'Variant color must be a string ID, not an object',
+        });
+      }
+      if (!variant._id && !variant.color) {
+        return res.status(STATUS.BAD_REQUEST).json({
+          statusCode: STATUS.BAD_REQUEST,
+          message: 'Each variant must have either an _id (for updates) or a color (for new variants)',
+        });
+      }
+      if (variant.color && !mongoose.isValidObjectId(variant.color)) {
+        return res.status(STATUS.BAD_REQUEST).json({
+          statusCode: STATUS.BAD_REQUEST,
+          message: `Invalid color ID in variant: ${variant.color}`,
+        });
+      }
+    }
+  }
+
   // Parse JSON fields
   const parseJsonField = (field, fieldName) => {
     if (field == null) {
@@ -444,15 +471,24 @@ export const updateProduct = asyncHandler(async (req, res) => {
             try {
               const parsed = JSON.parse(item);
               if (Array.isArray(parsed)) {
-                parsedVariants.push(...parsed);
+                parsedVariants.push(...parsed.map(v => ({
+                  ...v,
+                  color: v.color?._id?.toString() || v.color
+                })));
               } else {
-                parsedVariants.push(parsed);
+                parsedVariants.push({
+                  ...parsed,
+                  color: parsed.color?._id?.toString() || parsed.color
+                });
               }
             } catch {
               throw new Error(`Invalid variant format in array: ${item}`);
             }
           } else if (typeof item === 'object' && item !== null) {
-            parsedVariants.push(item);
+            parsedVariants.push({
+              ...item,
+              color: item.color?._id?.toString() || item.color
+            });
           }
         }
         return parsedVariants;
@@ -474,7 +510,11 @@ export const updateProduct = asyncHandler(async (req, res) => {
           );
         }
         if (fieldName === 'variants') {
-          return Array.isArray(parsed) ? parsed : [parsed];
+          const parsedVariants = Array.isArray(parsed) ? parsed : [parsed];
+          return parsedVariants.map(v => ({
+            ...v,
+            color: v.color?._id?.toString() || v.color
+          }));
         }
         return parsed;
       } catch {
@@ -511,71 +551,25 @@ export const updateProduct = asyncHandler(async (req, res) => {
     });
   }
 
-  // Validate variants
-  if (variants && Array.isArray(variants)) {
-    for (const variant of variants) {
-      if (!variant._id && !variant.color) {
-        return res.status(STATUS.BAD_REQUEST).json({
-          statusCode: STATUS.BAD_REQUEST,
-          message: 'Each variant must have either an _id (for updates) or a color (for new variants)',
-        });
-      }
-      if (variant.color && !mongoose.isValidObjectId(variant.color)) {
-        return res.status(STATUS.BAD_REQUEST).json({
-          statusCode: STATUS.BAD_REQUEST,
-          message: `Invalid color ID in variant: ${variant.color}`,
-        });
-      }
-    }
-  }
-
-  // Validate category ID if provided
-  let newCategoryDoc = null;
-  if (category) {
-    if (!mongoose.isValidObjectId(category)) {
-      return res.status(STATUS.BAD_REQUEST).json({
-        statusCode: STATUS.BAD_REQUEST,
-        message: 'Invalid category ID format',
-      });
-    }
-    newCategoryDoc = await Category.findById(category).select('name description');
-    if (!newCategoryDoc) {
-      return res.status(STATUS.BAD_REQUEST).json({
-        statusCode: STATUS.BAD_REQUEST,
-        message: PRODUCT_MESSAGES.INVALID_CATEGORY_ID,
-      });
-    }
-  }
-
-  // Validate brand ID if provided
-  if (brand) {
-    if (!mongoose.isValidObjectId(brand)) {
-      return res.status(STATUS.BAD_REQUEST).json({
-        statusCode: STATUS.BAD_REQUEST,
-        message: 'Invalid brand ID format',
-      });
-    }
-    const brandDoc = await Brand.findById(brand);
-    if (!brandDoc) {
-      return res.status(STATUS.BAD_REQUEST).json({
-        statusCode: STATUS.BAD_REQUEST,
-        message: 'Invalid brand ID',
-      });
-    }
-  }
-
   // Validate color IDs for variants
   if (variants && Array.isArray(variants)) {
     const colorIds = variants
-      .map((v) => v.color)
+      .map((v) => {
+        if (typeof v.color === 'object' && v.color?._id) {
+          console.warn('Found object in variant.color:', v.color);
+          return v.color._id.toString();
+        }
+        return v.color;
+      })
       .filter((color) => color && mongoose.isValidObjectId(color));
+    console.log('colorIds:', colorIds);
     const validColors = await Color.find({ _id: { $in: colorIds } });
-    // if (validColors.length !== colorIds.length) {
-    //   return res.status(STATUS.BAD_REQUEST).json({
-    //     statusCode: STATUS.BAD_REQUEST,
-    //     message: 'One or more colors do not exist',
-    //   });
-    // }
+    if (validColors.length !== colorIds.length) {
+      return res.status(STATUS.BAD_REQUEST).json({
+        statusCode: STATUS.BAD_REQUEST,
+        message: 'One or more colors do not exist',
+      });
+    }
   }
 
   // Initialize updated variants
