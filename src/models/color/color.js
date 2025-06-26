@@ -34,30 +34,13 @@ const ColorSchema = new mongoose.Schema(
       type: String,
       unique: true,
     },
-
-    /**
-     * Array tracking product counts by category
-     */
-    // product_counts_by_category: [
-    //   {
-    //     /**
-    //      * Reference to Category model
-    //      */
-    //     category: {
-    //       type: mongoose.Schema.Types.ObjectId,
-    //       ref: 'Category',
-    //       required: true,
-    //     },
-    //     /**
-    //      * Number of products in the category with this color
-    //      */
-    //     count: {
-    //       type: Number,
-    //       default: 0,
-    //       min: [0, 'Count cannot be negative'],
-    //     },
-    //   },
-    // ],
+    
+      productCount: {
+      type: Number,
+      default: 0,
+      min: [0, 'Product count cannot be negative'],
+    },
+    
   },
   {
     timestamps: true, // Automatically adds createdAt and updatedAt fields

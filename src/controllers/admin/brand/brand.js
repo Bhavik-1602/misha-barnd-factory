@@ -1,4 +1,5 @@
 import Brand from '../../../models/brand/brand.js';
+import Product from '../../../models/product/product.js'; // Import Product model
 import asyncHandler from 'express-async-handler';
 import { validateBrand } from '../../../validation/admin/brandvalidation/brandvaalidation.js';
 import { STATUS } from '../../../config/constant/status/status.js';
@@ -160,6 +161,15 @@ export const deleteBrand = asyncHandler(async (req, res) => {
     return res.status(STATUS.NOT_FOUND).json({
       statusCode: STATUS.NOT_FOUND,
       message: 'Brand not found',
+    });
+  }
+
+  // Check if the brand is used in any product
+  const productWithBrand = await Product.findOne({ brand: req.params.id });
+  if (productWithBrand) {
+    return res.status(STATUS.BAD_REQUEST).json({
+      statusCode: STATUS.BAD_REQUEST,
+      message: 'Please remove this brand from all products before deleting it.',
     });
   }
 

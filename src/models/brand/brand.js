@@ -28,11 +28,11 @@ const BrandSchema = new mongoose.Schema(
     /**
      * Number of products associated with the brand
      */
-    // product_count: {
-    //   type: Number,
-    //   default: 0,
-    //   min: [0, 'Product count cannot be negative'],
-    // },
+    product_count: {
+      type: Number,
+      default: 0,
+      min: [0, 'Product count cannot be negative'],
+    },
   },
   {
     timestamps: true, // Automatically adds createdAt and updatedAt fields

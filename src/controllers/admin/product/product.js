@@ -269,40 +269,38 @@ const parseJsonField = (field, fieldName) => {
       message: PRODUCT_MESSAGES.PRODUCT_EXISTS,
     });
   }
-console.log('files', req.files);
-  // Handle variant images only if variants exist
-// Handle variant images only if variants exist
-if (req.files && variants.length > 0) {
-  variants = variants.map((variant, index) => {
-    const variantImageField = `variants[${index}][image]`;
-    if (req.files[variantImageField]) {
-      const variantImages = Array.isArray(req.files[variantImageField])
-        ? req.files[variantImageField]
-        : [req.files[variantImageField]];
-      variant.images = variantImages.map((file, i) => ({
+
+  if (req.files && variants.length > 0) {
+    variants = variants.map((variant, index) => {
+      const variantImageField = `variants[${index}][image]`;
+      if (req.files[variantImageField]) {
+        const variantImages = Array.isArray(req.files[variantImageField])
+          ? req.files[variantImageField]
+          : [req.files[variantImageField]];
+        variant.images = variantImages.map((file, i) => ({
         url: file.path, // Cloudinary URL
         public_id: file.filename, // Cloudinary public_id
-        alt: req.body[`variants[${index}][imageAlt_${i}]`] || `Variant ${index} Image ${i + 1}`,
-        isPrimary: i === 0,
-      }));
-    } else {
-      variant.images = [];
-    }
-    return variant;
-  });
-}
+          alt: req.body[`variants[${index}][imageAlt_${i}]`] || `Variant ${index} Image ${i + 1}`,
+          isPrimary: i === 0,
+        }));
+      } else {
+        variant.images = [];
+      }
+      return variant;
+    });
+  }
 
-// Validate that at least one variant has images
-const hasImages = variants.some((v) => v.images?.length > 0);
-if (!hasImages && req.files && Object.keys(req.files).length > 0) {
-  return res.status(STATUS.BAD_REQUEST).json({
-    statusCode: STATUS.BAD_REQUEST,
-    message: 'Uploaded images must be assigned to a variant',
-  });
-}
+  // Validate that at least one variant has images
+  const hasImages = variants.some((v) => v.images?.length > 0);
+  if (!hasImages && req.files && Object.keys(req.files).length > 0) {
+    return res.status(STATUS.BAD_REQUEST).json({
+      statusCode: STATUS.BAD_REQUEST,
+      message: 'Uploaded images must be assigned to a variant',
+    });
+  }
 
   // Create new product
-  const product = new Product({
+ const product = new Product({
     name,
     slug,
     category,
@@ -336,6 +334,16 @@ if (!hasImages && req.files && Object.keys(req.files).length > 0) {
         { $inc: { productCount: 1 } },
         { session }
       );
+
+      // Increment productCount for each unique color in variants
+      const colorIds = [...new Set(variants.map((v) => v.color).filter(Boolean))]; // Get unique color IDs
+      if (colorIds.length > 0) {
+        await Color.updateMany(
+          { _id: { $in: colorIds } },
+          { $inc: { productCount: 1 } },
+          { session }
+        );
+      }
 
       // Commit the transaction
       await session.commitTransaction();
@@ -598,58 +606,57 @@ export const updateProduct = asyncHandler(async (req, res) => {
           color: variant.color,
           price: variant.price,
           sizes: variant.sizes || [],
-          images: variant.images || [], // Initialize empty, will add images later
+          images: variant.images || [],
         });
       }
     });
     updatedVariants = [...updatedVariants, ...newVariants];
   }
 
-  // Handle image uploads for variants (aligned with updateCategory and multerConfig)
   // Handle image uploads for variants
-if (req.files && Object.keys(req.files).length > 0) {
-  await Promise.all(updatedVariants.map(async (variant, index) => {
-    const variantImageField = `variants[${index}][image]`;
-    if (req.files[variantImageField]) {
-      const variantImages = Array.isArray(req.files[variantImageField])
-        ? req.files[variantImageField]
-        : [req.files[variantImageField]];
-      
-      // Delete old images from Cloudinary for existing variants
-      const isExistingVariant = variant._id && product.variants.some(
-        (pv) => pv._id.toString() === variant._id.toString()
-      );
-      if (isExistingVariant && variant.images?.length > 0) {
-        for (const img of variant.images) {
-          if (img.public_id) {
-            try {
-              await cloudinary.uploader.destroy(img.public_id);
-            } catch (error) {
-              console.error(`Failed to delete Cloudinary image ${img.public_id}:`, error);
+  if (req.files && Object.keys(req.files).length > 0) {
+    await Promise.all(updatedVariants.map(async (variant, index) => {
+      const variantImageField = `variants[${index}][image]`;
+      if (req.files[variantImageField]) {
+        const variantImages = Array.isArray(req.files[variantImageField])
+          ? req.files[variantImageField]
+          : [req.files[variantImageField]];
+        
+        // Delete old images from Cloudinary for existing variants
+        const isExistingVariant = variant._id && product.variants.some(
+          (pv) => pv._id.toString() === variant._id.toString()
+        );
+        if (isExistingVariant && variant.images?.length > 0) {
+          for (const img of variant.images) {
+            if (img.public_id) {
+              try {
+                await cloudinary.uploader.destroy(img.public_id);
+              } catch (error) {
+                console.error(`Failed to delete Cloudinary image ${img.public_id}:`, error);
+              }
             }
           }
         }
+
+        // Assign new images
+        variant.images = variantImages.map((file, i) => ({
+          url: file.path,
+          public_id: file.filename,
+          alt: req.body[`variants[${index}][imageAlt_${i}]`] || `Variant ${index} Image ${i + 1}`,
+          isPrimary: i === 0,
+        }));
       }
+    }));
 
-      // Assign new images
-      variant.images = variantImages.map((file, i) => ({
-        url: file.path, // Cloudinary URL
-        public_id: file.filename, // Cloudinary public_id
-        alt: req.body[`variants[${index}][imageAlt_${i}]`] || `Variant ${index} Image ${i + 1}`,
-        isPrimary: i === 0,
-      }));
+    // Validate that at least one variant has images
+    const hasImages = updatedVariants.some((v) => v.images?.length > 0);
+    if (!hasImages) {
+      return res.status(STATUS.BAD_REQUEST).json({
+        statusCode: STATUS.BAD_REQUEST,
+        message: 'Uploaded images must be assigned to a variant',
+      });
     }
-  }));
-
-  // Validate that at least one variant has images
-  const hasImages = updatedVariants.some((v) => v.images?.length > 0);
-  if (!hasImages) {
-    return res.status(STATUS.BAD_REQUEST).json({
-      statusCode: STATUS.BAD_REQUEST,
-      message: 'Uploaded images must be assigned to a variant',
-    });
   }
-}
 
   // Update slug if name changes
   let slug = product.slug;
@@ -665,10 +672,19 @@ if (req.files && Object.keys(req.files).length > 0) {
   }
 
   // Start a transaction for atomic updates
-  const session = await mongoose.startSession();
+const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
+    // Determine colors before and after the update
+    const oldColorIds = [...new Set(product.variants.map((v) => v.color?._id?.toString()).filter(Boolean))];
+    const newColorIds = [...new Set(updatedVariants.map((v) => v.color?.toString()).filter(Boolean))];
+
+    // Colors to increment (added colors)
+    const colorsToIncrement = newColorIds.filter((id) => !oldColorIds.includes(id));
+    // Colors to decrement (removed colors)
+    const colorsToDecrement = oldColorIds.filter((id) => !newColorIds.includes(id));
+
     // Update product fields
     const updateData = {
       name: name ?? product.name,
@@ -703,6 +719,24 @@ if (req.files && Object.keys(req.files).length > 0) {
       );
     }
 
+    // Increment productCount for newly added colors
+    if (colorsToIncrement.length > 0) {
+      await Color.updateMany(
+        { _id: { $in: colorsToIncrement } },
+        { $inc: { productCount: 1 } },
+        { session }
+      );
+    }
+
+    // Decrement productCount for removed colors
+    if (colorsToDecrement.length > 0) {
+      await Color.updateMany(
+        { _id: { $in: colorsToDecrement } },
+        { $inc: { productCount: -1 } },
+        { session }
+      );
+    }
+
     // Update product
     const updatedProduct = await Product.findByIdAndUpdate(
       req.params.id,
@@ -710,8 +744,8 @@ if (req.files && Object.keys(req.files).length > 0) {
       { new: true, session }
     )
       .populate('category', 'name description')
-      .populate('brand', 'name description')
-      .populate('variants.color', 'name hex');
+.populate('brand', 'name description')
+.populate('variants.color', 'name hex');
 
     // Commit transaction
     await session.commitTransaction();
@@ -723,22 +757,18 @@ if (req.files && Object.keys(req.files).length > 0) {
       }
       if (typeof obj === 'object' && obj !== null) {
         const newObj = { ...obj };
-        // Convert _id to string if it's an ObjectId
         if (newObj._id && newObj._id.buffer) {
           newObj._id = new mongoose.Types.ObjectId(newObj._id.buffer).toString();
         } else if (newObj._id && typeof newObj._id === 'object' && newObj._id.toString) {
           newObj._id = newObj._id.toString();
         }
-        // Convert Date fields to ISO strings
         if (newObj.createdAt && newObj.createdAt instanceof Date) {
           newObj.createdAt = newObj.createdAt.toISOString();
         }
         if (newObj.updatedAt && newObj.updatedAt instanceof Date) {
           newObj.updatedAt = newObj.updatedAt.toISOString();
         }
-        // Remove 'id' field if present
         delete newObj.id;
-        // Recursively transform nested objects
         Object.keys(newObj).forEach((key) => {
           newObj[key] = transformResponse(newObj[key]);
         });
@@ -765,6 +795,12 @@ if (req.files && Object.keys(req.files).length > 0) {
     session.endSession();
   }
 });
+
+/**
+ * @desc    Delete a product
+ * @route   DELETE /api/products/:id
+ * @access  Private (Admin)
+ */
 
 /**
  * @desc    Delete a product
@@ -804,7 +840,18 @@ export const deleteProduct = asyncHandler(async (req, res) => {
       { session }
     );
 
+    // Decrease productCount for each unique color in variants
+    const colorIds = [...new Set(product.variants.map((v) => v.color?._id?.toString()).filter(Boolean))];
+    if (colorIds.length > 0) {
+      await Color.updateMany(
+        { _id: { $in: colorIds } },
+        { $inc: { productCount: -1 } },
+        { session }
+      );
+    }
+
     // Delete product
+    Image
     await Product.deleteOne({ _id: req.params.id }, { session });
 
     // Commit transaction

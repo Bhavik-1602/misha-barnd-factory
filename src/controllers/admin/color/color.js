@@ -1,4 +1,5 @@
 import Color from '../../../models/color/color.js';
+import Product from '../../../models/product/product.js'; // Import Product model
 import asyncHandler from 'express-async-handler';
 import { STATUS } from '../../../config/constant/status/status.js';
 
@@ -196,6 +197,15 @@ export const deleteColor = asyncHandler(async (req, res) => {
     return res.status(STATUS.NOT_FOUND).json({
       statuscode: STATUS.NOT_FOUND,
       message: 'Color not found',
+    });
+  }
+
+  // Check if the color is used in any product
+  const productWithColor = await Product.findOne({ 'variants.color': req.params.id });
+  if (productWithColor) {
+    return res.status(STATUS.BAD_REQUEST).json({
+      statuscode: STATUS.BAD_REQUEST,
+      message: 'Please remove this color from all products before deleting it.',
     });
   }
 
