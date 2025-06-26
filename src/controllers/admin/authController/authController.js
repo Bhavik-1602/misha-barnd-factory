@@ -332,7 +332,7 @@ export const updateProfile = async (req, res) => {
         try {
           await cloudinary.uploader.destroy(admin.imagePublicId);
         } catch (error) {
-          console.error('Error deleting old profile image from Cloudinary:', error);
+          console.error('Error deleting old profile image from Cloudinary:', error.message, error.stack);
           // Continue with update even if deletion fails
         }
       }
@@ -344,16 +344,20 @@ export const updateProfile = async (req, res) => {
           : `admin_${admin._id}`;
         const publicId = `profile_${sanitizedName}_${Date.now()}`;
         const imageResult = await cloudinary.uploader.upload(req.file.path, {
-          folder: 'misha_brand/profiles', // Use a separate folder for profiles
-          format: 'jpg', // Enforce jpg format
+          folder: 'misha_brand/profiles',
+          format: 'jpg',
           public_id: publicId,
           transformation: [{ width: 960, height: 960, crop: 'limit', quality: 'auto' }],
         });
         admin.image = imageResult.secure_url;
         admin.imagePublicId = imageResult.public_id;
       } catch (error) {
-        console.error('Cloudinary upload error (profile image):', error);
-        return errorResponse(res, 'Failed to upload profile image', STATUS.SERVER_ERROR);
+        console.error('Cloudinary upload error:', {
+          message: error.message,
+          stack: error.stack,
+          requestFile: req.file,
+        });
+        return errorResponse(res, `Failed to upload profile image: ${error.message}`, STATUS.SERVER_ERROR);
       }
     }
 
@@ -372,7 +376,10 @@ export const updateProfile = async (req, res) => {
       },
     }, STATUS.OK);
   } catch (error) {
-    console.error('Update profile error:', error);
-    return errorResponse(res, 'Server error', STATUS.SERVER_ERROR);
+    console.error('Update profile error:', {
+      message: error.message,
+      stack: error.stack,
+    });
+    return errorResponse(res, `Server error: ${error.message}`, STATUS.SERVER_ERROR);
   }
 };

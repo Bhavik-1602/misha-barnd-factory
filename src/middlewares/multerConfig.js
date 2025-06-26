@@ -8,6 +8,14 @@ import { v2 as cloudinary } from 'cloudinary';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
 // Cloudinary storage configuration for categories
 const categoryStorage = new CloudinaryStorage({
   cloudinary: cloudinary,
@@ -22,6 +30,8 @@ const categoryStorage = new CloudinaryStorage({
   },
 });
 
+
+
 // Cloudinary storage configuration for products
 const productStorage = new CloudinaryStorage({
   cloudinary: cloudinary,
@@ -32,6 +42,20 @@ const productStorage = new CloudinaryStorage({
     public_id: (req, file) => {
       const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
       return `variant_${uniqueSuffix}-${file.originalname.split('.')[0]}`;
+    },
+  },
+});
+
+
+const profileStorage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'misha_brand/profiles',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'],
+    transformation: [{ width: 960, height: 960, crop: 'limit', quality: 'auto' }],
+    public_id: (req, file) => {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+      return `profile_${uniqueSuffix}-${file.originalname.split('.')[0]}`;
     },
   },
 });
@@ -59,6 +83,13 @@ const productUpload = multer({
   storage: productStorage,
   fileFilter,
   limits: { fileSize: 5 * 1024 * 1024 },
+});
+
+
+const profileUpload = multer({
+  storage: profileStorage,
+  fileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
 });
 
 // Helper function to create dynamic upload fields
